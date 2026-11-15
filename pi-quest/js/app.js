@@ -21,6 +21,17 @@
   };
   store.load();
 
+  const junior = () => store.d.junior !== false; // "Age 7 to 9" helpers: read-aloud, tap-to-type, pick-the-answer drills
+  const canSpeak = 'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance !== 'undefined';
+  function hush() { try { if (canSpeak) window.speechSynthesis.cancel(); } catch (e) { /* ignore */ } }
+  function readAloud(text) {
+    try {
+      if (window.speechSynthesis.speaking) { hush(); return; }
+      const u = new window.SpeechSynthesisUtterance(text.replace(/\.\./g, ' dot dot ').replace(/~/g, ' the squiggle ').replace(/>>/g, ' two arrows ').replace(/>/g, ' arrow ').replace(/\s+/g, ' '));
+      u.rate = 0.88; u.lang = 'en';
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* no voice on this device */ }
+  }
   const level = () => Math.min(Math.floor(store.d.xp / XP_LEVEL), LEVELS.length - 1);
   const nextMission = () => MISSIONS.find((m) => !store.d.done[m.id]) || null;
   function addXp(n) { store.d.xp += n; store.save(); paintRank(); }
@@ -162,14 +173,14 @@
   }
 
   /* ---------- nano look-alike ---------- */
-  function openNano(path, text) {
+  function openNano(path, text, snippet) {
     return new Promise((resolve) => {
       const name = path.split('/').pop();
       const el = frag('<div class="nano-back"><div class="nano" role="dialog" aria-modal="true" aria-label="nano editor"><div class="nano-title"><span>GNU nano 7.2</span><span>' + esc(name) + '</span><span class="nano-mod"></span></div>' +
         '<textarea class="code" id="nano-text" wrap="off" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" aria-label="File contents"></textarea>' +
         '<div class="nano-status" aria-live="polite"></div><div class="nano-keys">' +
         '<button type="button" class="nano-key" data-a="save"><b>^O</b>Save</button><button type="button" class="nano-key" data-a="exit"><b>^X</b>Exit</button>' +
-        '<button type="button" class="nano-key" data-a="in"><b>Tab</b>Indent</button><button type="button" class="nano-key" data-a="out">Un-indent</button></div></div></div>');
+        '<button type="button" class="nano-key" data-a="in"><b>Tab</b>Indent</button><button type="button" class="nano-key" data-a="out">Un-indent</button>' + (snippet ? '<button type="button" class="nano-key" data-a="fill">Type it for me</button>' : '') + '</div></div></div>');
       const ta = el.querySelector('textarea'), status = el.querySelector('.nano-status'), mod = el.querySelector('.nano-mod');
       let saved = null, dirty = false;
       ta.value = text; codeKeys(ta);
@@ -185,7 +196,7 @@
       };
       el.querySelectorAll('.nano-keys button').forEach((b) => {
         b.addEventListener('pointerdown', (e) => e.preventDefault());
-        b.addEventListener('click', () => ({ save, exit, in: () => shiftLines(ta, false), out: () => shiftLines(ta, true) }[b.dataset.a]()));
+        b.addEventListener('click', () => ({ save, exit, in: () => shiftLines(ta, false), out: () => shiftLines(ta, true), fill: () => { ta.value = snippet; ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); } }[b.dataset.a]()));
       });
       function onKey(e) {
         if (!(e.ctrlKey || e.metaKey)) return;
@@ -206,7 +217,7 @@
     const boardEl = document.createElement('div'); const board = new Board(boardEl);
     let busy = false, hIdx = null, draft = '';
     const io = {
-      print: (t, c) => term.print(t, c), clear: () => term.clear(), editor: openNano,
+      print: (t, c) => term.print(t, c), clear: () => term.clear(), editor: (path, text) => openNano(path, text, opts.nanoText ? opts.nanoText() : null),
       python: async (code, name) => {
         Board.unlockAudio();
         const res = await PiPy.run(code, { print: (t) => { term.print(t); sh.last.out += t; }, input: (p) => term.ask(p, true), board });
@@ -259,7 +270,8 @@
     ], (k) => { if (k.a) k.a(); else if (!term.form.hidden) insertText(term.input, k.label); term.focus(); });
     root.append(bar, term.el, boardEl);
     cleanup.push(() => PiPy.stop());
-    return { el: root, term, sh, board };
+    const type = (text) => { if (busy || term.form.hidden || term.pending) return; term.input.value = text; term.focus(); term.el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
+    return { el: root, term, sh, board, type };
   }
 
   /* ---------- a Python workspace ---------- */
@@ -322,7 +334,12 @@
     ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); } });
     function setCode(v) { ta.value = v; badLine = null; paintGutter(); ta.scrollTop = 0; if (opts.onChange) opts.onChange(v); }
     cleanup.push(() => PiPy.stop());
-    return { el: root, setCode, getCode: () => ta.value, board, term };
+    const addCode = (text, full) => {
+      if (full) setCode(full); else { const v = ta.value.replace(/\s+$/, ''); setCode((v ? v + '\n' : '') + text.replace(/\s+$/, '') + '\n'); }
+      ta.scrollTop = ta.scrollHeight; gutter.scrollTop = ta.scrollTop;
+      ta.closest('.ed-wrap').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+    return { el: root, setCode, addCode, getCode: () => ta.value, board, term };
   }
 
   /* ---------- screens ---------- */
@@ -336,7 +353,9 @@
       '<div class="hero-cta">' + (next
         ? '<a class="btn btn-go" href="#' + next.id + '">' + (started ? 'Continue: ' : 'Start: ') + esc(next.title) + ' →</a>'
         : '<a class="btn btn-go" href="#play">All missions done. Open the Playground →</a>') +
-      '<span class="hero-meta">' + doneCount + ' of ' + MISSIONS.length + ' missions done</span></div></div>' +
+      '<span class="hero-meta">' + doneCount + ' of ' + MISSIONS.length + ' missions done</span></div>' +
+      '<div class="age" role="group" aria-label="Who is learning?"><span class="silk">Who is learning?</span><div class="age-btns"><button type="button" class="age-btn" data-j="1" aria-pressed="' + junior() + '">Age 7 to 9</button><button type="button" class="age-btn" data-j="0" aria-pressed="' + !junior() + '">Age 10 and up</button></div>' +
+      '<span class="age-note">' + (junior() ? 'Bigger words, read-aloud, tap-to-type, and pick-the-answer drills.' : 'Type everything yourself. Drills are typed from memory.') + '</span></div></div>' +
       '<div class="demo" aria-hidden="true"><div class="demo-line"><span class="p">pi@raspberrypi:~ $</span> cd projects/blink</div><div class="demo-line"><span class="p">pi@raspberrypi:~/projects/blink $</span> python3 blink.py<span class="cursor"></span></div>' +
       '<div class="demo-board"><span class="demo-led"></span><span class="silk">GPIO17 &nbsp;led.on()</span></div></div></div>' +
       '<div class="wrap tracks">';
@@ -358,6 +377,7 @@
       '<div class="row"><button type="button" class="btn btn-small" id="wipe">Erase progress on this device</button><span id="wipe-confirm" hidden>Are you sure? <button type="button" class="btn btn-small btn-go" id="wipe-yes">Yes, erase it</button> <button type="button" class="btn btn-small" id="wipe-no">Keep it</button></span></div>' +
       '</div></details></div></main>';
     app.innerHTML = html;
+    app.querySelectorAll('.age-btn').forEach((b) => b.addEventListener('click', () => { store.d.junior = b.dataset.j === '1'; store.save(); document.body.classList.toggle('junior', junior()); viewHome(); }));
     const wc = document.getElementById('wipe-confirm');
     document.getElementById('wipe').addEventListener('click', () => { wc.hidden = false; });
     document.getElementById('wipe-no').addEventListener('click', () => { wc.hidden = true; });
@@ -376,7 +396,7 @@
       '<main class="wrap m-grid"><aside class="brief" aria-live="polite"></aside><section class="work"></section></main>';
     const brief = app.querySelector('.brief'), work = app.querySelector('.work');
     let idx = store.d.done[m.id] ? m.steps.length : Math.min(store.d.step[m.id] || 0, m.steps.length - 1);
-    let misses = 0, session;
+    let misses = 0, session, showHint = () => {};
 
     function paintBrief() {
       if (idx >= m.steps.length) {
@@ -393,16 +413,33 @@
       const s = m.steps[idx];
       brief.innerHTML = '<div class="dots" role="img" aria-label="Step ' + (idx + 1) + ' of ' + m.steps.length + '">' + m.steps.map((_, i) => '<i class="' + (i < idx ? 'd' : i === idx ? 'c' : '') + '"></i>').join('') + '<span>Step ' + (idx + 1) + ' of ' + m.steps.length + '</span></div>' +
         '<div class="say">' + s.say + '</div><div class="task"><span class="silk">Your task</span><div class="task-do">' + s.do + '</div></div>' +
-        '<div class="nudge" hidden></div><div class="hint-text" hidden></div>' +
-        '<div class="help"><button type="button" class="btn btn-small" id="hint">Hint</button><button type="button" class="btn btn-small btn-quiet" id="answer" hidden>Show me the answer</button></div>';
+        '<div class="tap-note" hidden></div><div class="nudge" hidden></div><div class="hint-text" hidden></div>' +
+        '<div class="help">' + (canSpeak ? '<button type="button" class="btn btn-small" id="read">Read to me</button>' : '') + '<button type="button" class="btn btn-small" id="hint">Hint</button><button type="button" class="btn btn-small btn-quiet" id="answer"' + (junior() ? '' : ' hidden') + '>Show me the answer</button></div>';
       const hintBox = brief.querySelector('.hint-text'), ansBtn = brief.querySelector('#answer');
-      brief.querySelector('#hint').addEventListener('click', () => { hintBox.hidden = false; hintBox.textContent = s.hint; ansBtn.hidden = false; });
+      showHint = () => { if (hintBox.hidden) { hintBox.hidden = false; hintBox.textContent = s.hint; ansBtn.hidden = false; } };
+      brief.querySelector('#hint').addEventListener('click', showHint);
+      if (canSpeak) brief.querySelector('#read').addEventListener('click', () => readAloud(brief.querySelector('.say').innerText + '. Your task. ' + brief.querySelector('.task-do').innerText));
+      if (junior()) {
+        const note = brief.querySelector('.tap-note');
+        const taps = m.kind === 'terminal' ? brief.querySelectorAll('.task-do code:not(.n)') : brief.querySelectorAll('.task-do pre');
+        taps.forEach((t) => {
+          t.classList.add('tap'); t.setAttribute('role', 'button'); t.tabIndex = 0;
+          const go = () => {
+            const text = straighten(t.textContent);
+            if (m.kind === 'terminal') session.type(text);
+            else { session.addCode(text, s.tapCode || (s.tapReplace !== undefined ? (s.tapReplace === true ? '' : s.tapReplace) + text + '\n' : null)); toast('Added to your code'); }
+          };
+          t.addEventListener('click', go);
+          t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+        });
+        if (taps.length) { note.hidden = false; note.textContent = m.kind === 'terminal' ? 'Tap a green box to type it for you. Then press Enter.' : 'Tap the code box to put it in your program. Then press Run.'; }
+      }
       ansBtn.addEventListener('click', () => { hintBox.hidden = false; hintBox.innerHTML = esc(s.hint) + '<pre></pre>'; hintBox.querySelector('pre').textContent = s.answer; ansBtn.hidden = true; });
     }
     function nudge(text) { const n = brief.querySelector('.nudge'); if (n) { n.textContent = text; n.hidden = false; } }
 
     function pass() {
-      idx++; misses = 0;
+      idx++; misses = 0; hush();
       store.d.step[m.id] = idx;
       if (idx >= m.steps.length) {
         const first = !store.d.done[m.id];
@@ -434,7 +471,8 @@
       if (m.kind === 'terminal') {
         session = terminalSession({
           tree: m.tree, cwd: m.cwd,
-          onCommand: (c) => attempt(c, () => { if (++misses >= 3) nudge('Stuck? Read the task once more, or tap Hint. Exploring is fine too.'); }),
+          nanoText: () => (junior() && idx < m.steps.length ? m.steps[idx].nanoText || null : null),
+          onCommand: (c) => attempt(c, () => { misses++; if (junior() && misses >= 2) showHint(); if (misses >= 3) nudge('Stuck? Read the task once more, or tap Hint. Exploring is fine too.'); }),
         });
       } else {
         const start = Math.min(idx, m.steps.length - 1);
@@ -445,7 +483,7 @@
           onChange: (v) => { store.d.code[m.id] = v; store.save(); },
           onRun: (ctx, live) => {
             if (ctx.passed) return;
-            attempt(ctx, live ? null : () => nudge(ctx.error ? 'Errors are clues, not failures. Read the red message, look at the marked line, and try again.' : ctx.stopped ? 'Stopped. Run it again when you are ready.' : 'Your program ran, but the task is not done yet. Read it once more, or tap Hint.'));
+            attempt(ctx, live ? null : () => { if (junior() && !ctx.stopped) showHint(); nudge(ctx.error ? 'Errors are clues, not failures. Read the red message, look at the marked line, and try again.' : ctx.stopped ? 'Stopped. Run it again when you are ready.' : 'Your program ran, but the task is not done yet. Read it once more, or tap Hint.'); });
             if (idx > ctx.startIdx) ctx.passed = true;
           },
         });
@@ -461,7 +499,7 @@
     const pool = unlocked.length >= 4 ? unlocked : DRILLS.filter((d) => d.after === 'cli-look' || store.d.done[d.after]);
     const score = (d) => { const s = store.d.drill[d.id] || [0, 0]; return s[0] - 2 * s[1] + Math.random() * 1.5; };
     const cards = pool.slice().sort((a, b) => score(a) - score(b)).slice(0, Math.min(8, pool.length)).sort(() => Math.random() - .5);
-    app.innerHTML = topBar('drills') + '<main class="wrap page"><div class="page-head"><h1>Drills</h1><p>Quick-fire practice. Type each answer from memory. Cards you miss come back more often. Finishing missions unlocks more cards (' + unlocked.length + ' of ' + DRILLS.length + ' unlocked).</p></div><div class="drill"></div></main>';
+    app.innerHTML = topBar('drills') + '<main class="wrap page"><div class="page-head"><h1>Drills</h1><p>Quick-fire practice. ' + (junior() ? 'Tap the right answer.' : 'Type each answer from memory.') + ' Cards you miss come back more often. Finishing missions unlocks more cards (' + unlocked.length + ' of ' + DRILLS.length + ' unlocked).</p></div><div class="drill"></div></main>';
     const box = app.querySelector('.drill');
     let i = 0, right = 0, streak = 0, retry = false;
     function card() {
@@ -473,7 +511,29 @@
       }
       const d = cards[i]; retry = false;
       box.innerHTML = '<div class="drill-meta"><span>Card ' + (i + 1) + ' of ' + cards.length + '</span><span>Streak: ' + streak + '</span></div><div class="drill-q">' + esc(d.q) + '</div>' +
-        '<form class="drill-form" autocomplete="off"><input class="drill-in" id="drill-answer" type="text" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" aria-label="Your answer"><button class="btn btn-go" type="submit">Check</button></form><div class="drill-fb" aria-live="polite"></div>';
+        (junior() ? '<div class="choices"></div>' : '<form class="drill-form" autocomplete="off"><input class="drill-in" id="drill-answer" type="text" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" aria-label="Your answer"><button class="btn btn-go" type="submit">Check</button></form>') + '<div class="drill-fb" aria-live="polite"></div>';
+      if (junior()) {
+        const kind = (x) => (/^(Python|Pi):/.test(x.q) ? 'py' : 'cli');
+        const others = DRILLS.filter((x) => x.answer !== d.answer && kind(x) === kind(d) && !d.re.test(x.answer)).sort(() => Math.random() - .5).slice(0, 2);
+        const fbj = box.querySelector('.drill-fb'), wrap = box.querySelector('.choices');
+        [d, ...others].sort(() => Math.random() - .5).forEach((o) => {
+          const b = frag('<button type="button" class="choice"></button>'); b.textContent = o.answer;
+          b.addEventListener('click', () => {
+            const rec = store.d.drill[d.id] || (store.d.drill[d.id] = [0, 0]);
+            if (o === d) {
+              if (!retry) { right++; streak++; rec[0]++; store.d.best = Math.max(store.d.best, streak); addXp(XP_DRILL); toast('Correct! <b>+' + XP_DRILL + ' XP</b>'); }
+              store.save(); i++; card();
+            } else {
+              if (!retry) { rec[1]++; streak = 0; store.save(); }
+              retry = true; b.disabled = true;
+              fbj.className = 'drill-fb bad'; fbj.textContent = 'Not that one. Have another go.';
+              box.querySelector('.drill-meta span:last-child').textContent = 'Streak: 0';
+            }
+          });
+          wrap.appendChild(b);
+        });
+        return;
+      }
       const input = box.querySelector('input'), fb = box.querySelector('.drill-fb');
       fixQuotes(input); input.focus();
       box.querySelector('form').addEventListener('submit', (e) => {
@@ -537,6 +597,7 @@
   /* ---------- routing ---------- */
   function route() {
     cleanup.forEach((f) => f()); cleanup = [];
+    hush(); document.body.classList.toggle('junior', junior());
     document.querySelectorAll('.nano-back').forEach((n) => n.remove());
     const h = (location.hash || '').replace(/^#/, '');
     const m = byId(h);

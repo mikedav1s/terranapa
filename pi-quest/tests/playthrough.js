@@ -58,6 +58,7 @@ const PLAN = {
   page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
   await page.goto(URL); await page.waitForSelector('.tracks');
+  await page.click('.age-btn[data-j="0"]'); // the main run types everything, like an older learner
 
   const stepNow = async () => (await page.locator('.done-card').count()) ? 'done' : parseInt((await page.locator('.dots span').textContent()).match(/Step (\d+)/)[1], 10) - 1;
   const idle = () => page.waitForSelector('.term:not(.console) .term-line:not([hidden])', { timeout: 20000 });
@@ -111,6 +112,43 @@ const PLAN = {
     await page.goto(URL + '#play'); await page.waitForSelector('.work-py'); await page.click('[data-a=run]'); await page.waitForSelector('[data-a=run]:not([disabled])', { timeout: 15000 });
     await page.click('.tab[data-t=term]'); await page.fill('.term-in', 'echo hi | wc -c && cowsay moo'); await page.press('.term-in', 'Enter'); await sleep(200);
     const xp = await page.locator('.rank-xp').textContent(); console.log('final', xp);
+  }
+  if (!only || only === 'junior') {
+    // "Age 7 to 9" helpers: tap-to-type, tap-to-add code, type-it-for-me in nano, pick-the-answer drills
+    const ctx = await browser.newContext({ viewport: { width: 1180, height: 820 } });
+    const jp = await ctx.newPage();
+    jp.on('pageerror', (e) => problems.push('junior pageerror: ' + e.message));
+    const jstep = async () => (await jp.locator('.done-card').count()) ? 'done' : parseInt((await jp.locator('.dots span').textContent()).match(/Step (\d+)/)[1], 10) - 1;
+    const want = async (n, what) => { await sleep(150); const got = await jstep(); if (got !== n) problems.push(`junior: ${what} (expected step index ${n}, got ${got})`); };
+    const runIt = async (during, stop) => { await jp.click('[data-a=run]'); if (during) await during(jp); if (stop) await jp.click('[data-a=stop]'); await jp.waitForSelector('[data-a=run]:not([disabled])', { timeout: 20000 }); };
+    await jp.goto(URL + '#cli-look'); await jp.waitForSelector('.task-do code.tap');
+    await jp.click('.task-do code.tap'); await jp.press('.term-in', 'Enter'); await want(1, 'tapping a command then Enter should pass cli-look step 1');
+    await jp.goto(URL + '#cli-python'); await jp.waitForSelector('.task');
+    for (const c of ['mkdir code', 'cd code']) { await jp.fill('.term-in', c); await jp.press('.term-in', 'Enter'); await sleep(80); }
+    await jp.click('.task-do code.tap'); await jp.press('.term-in', 'Enter');
+    await jp.click('.nano [data-a=fill]'); await jp.click('.nano [data-a=save]'); await jp.click('.nano [data-a=exit]'); await want(2, 'nano "Type it for me" should pass cli-python step 2');
+    await jp.goto(URL + '#py-vars'); await jp.waitForSelector('.task');
+    await runIt(); await jp.fill('.work-py textarea', 'name = "Sam"\nprint("Hello", name)\n'); await runIt(); await want(2, 'py-vars setup');
+    await jp.click('.task-do pre.tap'); await runIt(); await want(3, 'tapping the code box should pass py-vars step 3');
+    await jp.click('.task-do pre.tap'); await runIt(); await want(4, 'tapping the code box should pass py-vars step 4');
+    await jp.goto(URL + '#py-if'); await jp.waitForSelector('.task');
+    await runIt(); await jp.fill('.work-py textarea', 'temp = 10\n\nif temp > 25:\n    print("It is hot!")\n'); await jp.click('.task-do pre.tap'); await runIt(); await want(2, 'py-if else tap');
+    await jp.click('.task-do pre.tap'); await runIt(); await want(3, 'py-if elif tap (whole program)');
+    await jp.goto(URL + '#pi-button'); await jp.waitForSelector('.task');
+    const jpress = async (pg) => { const b = pg.locator('.part-button'); await b.scrollIntoViewIfNeeded(); const box = await b.boundingBox(); await pg.mouse.move(box.x + box.width / 2, box.y + 30); await pg.mouse.down(); await sleep(250); await pg.mouse.up(); await sleep(150); };
+    await runIt(jpress); await jp.fill('.work-py textarea', BTN + 'button.wait_for_press()\nled.on()\nbutton.wait_for_release()\nled.off()\n'); await runIt(jpress); await want(2, 'pi-button setup');
+    const three = async (pg) => { await jpress(pg); await jpress(pg); await jpress(pg); };
+    await jp.click('.task-do pre.tap'); await runIt(three, true); await want(3, 'pi-button loop tap');
+    await jp.click('.task-do pre.tap'); await runIt(three, true); await want('done', 'pi-button counter tap');
+    await jp.goto(URL + '#drills'); await jp.waitForSelector('.choice');
+    for (let n = 0; n < 12 && (await jp.locator('.choice').count()); n++) {
+      const ans = await jp.evaluate(() => { const q = document.querySelector('.drill-q').textContent; return window.PiLessons.DRILLS.find((d) => d.q === q).answer; });
+      if (n === 0) await jp.locator('.choice').filter({ hasNotText: ans }).first().click();
+      await jp.locator('.choice').filter({ hasText: ans }).first().evaluate((el, a) => { [...document.querySelectorAll('.choice')].find((c) => c.textContent === a).click(); }, ans); await sleep(40);
+    }
+    if (!(await jp.locator('.drill-end').count())) problems.push('junior drills: round did not finish');
+    console.log(problems.some((p) => p.startsWith('junior')) ? 'FAIL junior helpers' : 'ok   junior helpers');
+    await ctx.close();
   }
   await browser.close();
   if (problems.length) { console.log('\nPROBLEMS:\n' + problems.join('\n')); process.exit(1); }

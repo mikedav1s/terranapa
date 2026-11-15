@@ -1,5 +1,5 @@
 /* Pi Quest offline cache. Bump VERSION when files change. */
-const VERSION = 'pi-quest-v1';
+const VERSION = 'pi-quest-v2';
 const FILES = ['./', 'index.html', 'css/style.css', 'js/shell.js', 'js/pi.js', 'js/lessons.js', 'js/app.js',
   'vendor/skulpt.min.js', 'vendor/skulpt-stdlib.js', 'icon.svg', 'icon-180.png', 'icon-512.png', 'manifest.webmanifest'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });

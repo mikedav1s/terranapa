@@ -19,6 +19,14 @@ or the Pi itself) and needs no account and no server.
 - **Cheat sheet**: fills in as missions are completed, plus a "move to a real Pi" guide.
 - **Playground**: a free terminal and a free Python editor with LEDs, a button and a buzzer.
 
+The home screen asks **who is learning**:
+
+- **Age 7 to 9** (the default): bigger text, a **Read to me** button on every step,
+  commands and code blocks that can be tapped instead of typed, hints that appear by
+  themselves after a miss, a "Type it for me" key in nano, and drills where the
+  answer is picked from three choices.
+- **Age 10 and up**: everything is typed, and drills are typed from memory.
+
 Every step is a small task with an automatic check, a hint, and an answer if needed.
 Most missions end with a step done from memory. Progress is saved in the browser on
 that device.

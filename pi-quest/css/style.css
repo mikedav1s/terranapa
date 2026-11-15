@@ -284,6 +284,29 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .tab[aria-selected="true"] { background: var(--pcb); border-color: var(--pcb); color: var(--pcb-ink); }
 .play-body { display: grid; gap: 14px; min-width: 0; }
 
+/* ---------- helpers for younger learners ---------- */
+.age { margin-top: 20px; display: grid; gap: 8px; justify-items: start; }
+.age .silk { color: var(--muted); }
+.age-btns { display: inline-flex; border: 2px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.age-btn { min-height: 44px; padding: 0 1em; border: 0; background: transparent; font-family: var(--font-display); font-weight: 600; color: var(--muted); }
+.age-btn[aria-pressed="true"] { background: var(--pcb); color: var(--pcb-ink); }
+.age-note { color: var(--muted); font-size: .92rem; }
+.junior .say { font-size: 1.14rem; line-height: 1.55; }
+.junior .task-do { font-size: 1.2rem; }
+.junior .hint-text, .junior .nudge { font-size: 1.05rem; }
+.junior .term, .junior .term-in, .junior .code, .junior .gutter { font-size: 18px; }
+.junior .key { min-width: 50px; min-height: 48px; font-size: 1rem; }
+.junior .m-goal { font-size: .95rem; }
+.tap { cursor: pointer; outline-offset: 2px; }
+code.tap { background: var(--ok); color: var(--surface); padding: .25em .6em; border-radius: 8px; box-shadow: 0 3px 0 color-mix(in srgb, var(--ok) 60%, var(--ink)); margin-block: 3px; }
+code.tap:active, pre.tap:active { transform: translateY(2px); box-shadow: none; }
+pre.tap { border: 2px solid var(--led-green); box-shadow: 0 3px 0 color-mix(in srgb, var(--ok) 60%, var(--ink)); }
+.tap-note { color: var(--muted); font-size: .95rem; }
+.choices { display: grid; gap: 10px; }
+.choice { min-height: 58px; text-align: left; padding: .6em .9em; border-radius: 12px; border: 2px solid var(--term-bg); border-bottom-width: 5px; background: var(--term-bg); color: var(--term-fg); font-family: var(--font-mono); font-size: 1.1rem; overflow-wrap: anywhere; }
+.choice:hover { border-color: var(--gold); }
+.choice:disabled { opacity: .35; cursor: default; }
+
 /* ---------- toast + confetti ---------- */
 #toast { position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); background: var(--ink); color: var(--bg); padding: .7em 1.2em; border-radius: 99px; font-family: var(--font-display); font-weight: 600; z-index: 80; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: calc(100vw - 32px); text-align: center; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
