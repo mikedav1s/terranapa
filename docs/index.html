@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Woodshed Guitar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="#library">Woodshed<span>guitar practice</span></a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#library" data-view="library">Library</a>
+      <a href="#scales" data-view="scales">Scales &amp; modes</a>
+      <a href="#chords" data-view="chords">Chords</a>
+      <a href="#tools" data-view="tools">Metronome &amp; tuner</a>
+      <a href="#progress" data-view="progress">Progress</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- ============ LIBRARY / PRACTICE ============ -->
+  <section id="view-library" class="view">
+    <div class="lib">
+      <aside class="lib-side" id="lib-side">
+        <input type="search" id="lib-search" class="input" placeholder="Search licks, tunes, players" aria-label="Search the library">
+        <div class="chips" id="style-chips" role="group" aria-label="Style"></div>
+        <label class="field">
+          <span>Player study</span>
+          <select id="tag-select" class="input"></select>
+        </label>
+        <ul class="lick-list" id="lick-list"></ul>
+        <button class="btn btn-ghost" id="add-lick">+ Add your own lick or paste a tab</button>
+        <details class="songs" id="songs-box">
+          <summary id="songs-title">Songs to know</summary>
+          <ul id="songs-list"></ul>
+        </details>
+      </aside>
+
+      <div class="lib-main" id="lib-main">
+        <button class="btn btn-ghost back" id="lib-back">← Library</button>
+
+        <div id="lick-view">
+          <div class="lick-head">
+            <div>
+              <p class="eyebrow" id="lick-style"></p>
+              <h1 id="lick-title"></h1>
+              <p class="meta" id="lick-meta"></p>
+            </div>
+            <div class="lick-actions" id="lick-actions"></div>
+          </div>
+          <p class="about" id="lick-about"></p>
+
+          <div class="transport" id="transport">
+            <button class="btn btn-primary play" id="play-btn">▶ Play</button>
+            <div class="tempo">
+              <label for="bpm">Tempo</label>
+              <input type="range" id="bpm" min="30" max="260" step="1">
+              <output id="bpm-out" class="num"></output>
+              <div class="seg" id="pct-btns">
+                <button data-pct="0.5">50%</button><button data-pct="0.75">75%</button><button data-pct="1">100%</button>
+              </div>
+            </div>
+            <div class="toggles">
+              <label><input type="checkbox" id="opt-loop"> Loop</label>
+              <label><input type="checkbox" id="opt-count"> Count-in</label>
+              <label><input type="checkbox" id="opt-click"> Click</label>
+              <label><input type="checkbox" id="opt-guide"> Guide notes</label>
+              <label><input type="checkbox" id="opt-backing"> Chords</label>
+              <label><input type="checkbox" id="opt-swing"> Swing</label>
+            </div>
+            <div class="toggles">
+              <label>Bars <input type="number" id="bar-from" class="input small" min="1"> to <input type="number" id="bar-to" class="input small" min="1"></label>
+              <label>Speed up <input type="number" id="ramp" class="input small" min="0" max="20" step="1"> bpm each loop</label>
+              <span class="spacer"></span>
+              <label><input type="checkbox" id="opt-notation"> Notation</label>
+              <label><input type="checkbox" id="opt-tab"> Tab</label>
+              <label title="Hide the music and learn the phrase by ear"><input type="checkbox" id="opt-ear"> Ear mode</label>
+            </div>
+          </div>
+
+          <div class="score-card">
+            <div class="score-scroll"><div id="score" class="score"></div></div>
+            <div id="ear-cover" class="ear-cover" hidden>
+              <p><strong>Ear mode.</strong> The music is hidden. Play it, sing it back, then find it on the neck. Use Step through to check yourself note by note.</p>
+            </div>
+            <p class="errors" id="lick-errors" hidden></p>
+          </div>
+
+          <div class="fb-scroll"><div id="lick-fb"></div></div>
+
+          <div class="listen" id="listen">
+            <div class="listen-head">
+              <h2>Listening mode</h2>
+              <p class="hint">The app listens through your microphone and checks each note you play. Wear headphones, or turn Guide notes off, so it only hears your guitar.</p>
+            </div>
+            <div class="listen-row">
+              <button class="btn btn-primary" id="along-btn">● Play along and score</button>
+              <button class="btn" id="step-btn">Step through (waits for you)</button>
+              <label class="inline"><input type="checkbox" id="opt-along-guide"> Guide notes while scoring</label>
+            </div>
+            <div class="listen-live" id="listen-live">
+              <div class="heard"><span class="lbl">Heard</span><span class="big num" id="heard-note">–</span></div>
+              <div class="heard"><span class="lbl">Next</span><span class="big num" id="want-note">–</span></div>
+              <div class="heard"><span class="lbl">Notes hit</span><span class="big num" id="live-score">–</span></div>
+              <div class="meter"><div id="level-bar"></div></div>
+            </div>
+            <p class="result" id="listen-result" hidden></p>
+            <p class="errors" id="mic-error" hidden></p>
+            <details class="adv">
+              <summary>Timing calibration</summary>
+              <label>Microphone delay <input type="range" id="latency" min="0" max="250" step="5"> <output id="latency-out" class="num"></output></label>
+              <p class="hint">If you are playing in time but notes score as late, raise this. Bluetooth headphones and speakers often need 150 ms or more.</p>
+            </details>
+            <div class="history" id="lick-history"></div>
+          </div>
+        </div>
+
+        <!-- editor for your own licks -->
+        <div id="editor" hidden>
+          <h1>Your lick</h1>
+          <p class="about">Type a phrase in the app's notation, or paste ASCII tab from any transcription and convert it. It is saved in this browser and gets every practice tool: playback, tempo, looping and listening mode.</p>
+          <div class="form-grid">
+            <label class="field"><span>Title</span><input id="ed-title" class="input" placeholder="Church Street Blues, intro"></label>
+            <label class="field"><span>Style</span><select id="ed-style" class="input"></select></label>
+            <label class="field"><span>Meter</span><input id="ed-meter" class="input" value="4/4"></label>
+            <label class="field"><span>Target tempo (quarter notes / min)</span><input id="ed-tempo" class="input" type="number" value="100" min="30" max="260"></label>
+          </div>
+          <label class="field"><span>Notes</span>
+            <textarea id="ed-notes" class="input mono" rows="5" spellcheck="false" placeholder="e 6/3 5/0 5/1h 5/2 4/0 4/2 q 3/0 r |"></textarea>
+          </label>
+          <p class="errors" id="ed-errors" hidden></p>
+          <div class="score-card"><div class="score-scroll"><div id="ed-score" class="score"></div></div></div>
+          <div class="listen-row">
+            <button class="btn btn-primary" id="ed-save">Save lick</button>
+            <button class="btn" id="ed-cancel">Cancel</button>
+          </div>
+          <details class="adv" open>
+            <summary>Paste ASCII tab</summary>
+            <textarea id="ed-ascii" class="input mono" rows="7" spellcheck="false" placeholder="e|-----------------|&#10;B|-----------------|&#10;G|-------------0---|&#10;D|---------0-2-----|&#10;A|---0-1h2---------|&#10;E|-3---------------|"></textarea>
+            <div class="listen-row">
+              <label class="inline">Each note is a
+                <select id="ed-ascii-dur" class="input small"><option value="e">eighth</option><option value="s">sixteenth</option><option value="q">quarter</option></select>
+              </label>
+              <button class="btn" id="ed-convert">Convert to notes</button>
+            </div>
+            <p class="hint">ASCII tab does not record rhythm, so every note starts with the same length. Step-through mode ignores rhythm entirely; edit the durations afterwards if you want to play along in time.</p>
+          </details>
+          <details class="adv">
+            <summary>Notation reference</summary>
+            <pre class="ref">w h q e s        whole, half, quarter, eighth, sixteenth (applies until changed)
+q.  e.           dotted          et st qt   triplets
+6/3              string 6 (low E), fret 3
+g3 c#4 bb3       a pitch by name; open strings are e2 a2 d3 g3 b3 e4
+@5               place named pitches around the 5th fret
+5/3+4/2+3/0      notes played together
+r                rest            -   hold the previous note (tie)
+|                bar line        [Am7]  chord symbol
+after a note:    h hammer-on  p pull-off  s slide  ~ vibrato
+                 b whole-step bend  b1 half-step bend  q quarter-tone bend</pre>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCALES ============ -->
+  <section id="view-scales" class="view" hidden>
+    <h1>Scales &amp; modes</h1>
+    <div class="bar">
+      <label class="field"><span>Root</span><select id="sc-root" class="input"></select></label>
+      <label class="field grow"><span>Scale</span><select id="sc-scale" class="input"></select></label>
+      <label class="field"><span>Labels</span>
+        <select id="sc-labels" class="input"><option value="note">Note names</option><option value="degree">Scale degrees</option></select>
+      </label>
+      <button class="btn btn-primary" id="sc-play">▶ Play scale</button>
+    </div>
+    <p class="about" id="sc-about"></p>
+    <p class="meta" id="sc-notes"></p>
+    <div class="fb-scroll"><div id="sc-fb"></div></div>
+    <p class="hint" id="sc-quarter" hidden>Outlined notes are quarter tones: fret the note shown and bend it up slightly, about half the distance to the next fret. Tap any note on the neck to hear it.</p>
+    <h2>Related studies</h2>
+    <ul class="lick-list inline-list" id="sc-licks"></ul>
+  </section>
+
+  <!-- ============ CHORDS ============ -->
+  <section id="view-chords" class="view" hidden>
+    <h1>Chord library</h1>
+    <div class="bar">
+      <label class="field"><span>Root</span><select id="ch-root" class="input"></select></label>
+      <div class="chips" id="ch-cats" role="group" aria-label="Chord family"></div>
+    </div>
+    <p class="about" id="ch-note"></p>
+    <div class="chord-grid" id="ch-grid"></div>
+    <p class="hint">Tap a chord to hear it. Filled accent dots are roots.</p>
+  </section>
+
+  <!-- ============ TOOLS ============ -->
+  <section id="view-tools" class="view" hidden>
+    <div class="tools">
+      <div class="panel">
+        <h1>Metronome</h1>
+        <div class="metro-bpm"><output id="m-bpm-out" class="num">100</output><span>bpm</span></div>
+        <input type="range" id="m-bpm" min="30" max="300" value="100" aria-label="Tempo">
+        <div class="listen-row center">
+          <button class="btn" id="m-minus">−5</button>
+          <button class="btn btn-primary play" id="m-start">▶ Start</button>
+          <button class="btn" id="m-plus">+5</button>
+          <button class="btn" id="m-tap">Tap tempo</button>
+        </div>
+        <div class="beats" id="m-beats" aria-hidden="true"></div>
+        <div class="form-grid">
+          <label class="field"><span>Meter</span>
+            <select id="m-meter" class="input">
+              <option>2/4</option><option>3/4</option><option selected>4/4</option><option>5/4</option><option>6/8</option>
+              <option value="7/8">7/8 (kalamatianos 3+2+2)</option><option value="9/8">9/8 (3+3+3)</option>
+              <option value="9/8z">9/8 (karsilamas 2+2+2+3)</option><option value="10/8">10/8 (sama'i 3+2+2+3)</option><option>12/8</option>
+            </select>
+          </label>
+          <label class="field"><span>Subdivide the beat</span>
+            <select id="m-sub" class="input"><option value="1">None</option><option value="2">Eighths</option><option value="3">Triplets</option><option value="4">Sixteenths</option></select>
+          </label>
+          <label class="field"><span>Speed trainer: add bpm</span><input type="number" id="m-inc" class="input" value="0" min="0" max="20"></label>
+          <label class="field"><span>every N bars</span><input type="number" id="m-every" class="input" value="4" min="1" max="64"></label>
+        </div>
+      </div>
+      <div class="panel">
+        <h1>Tuner</h1>
+        <div class="tuner">
+          <div class="tuner-note num" id="t-note">–</div>
+          <div class="tuner-scale"><div class="tuner-mid"></div><div class="tuner-needle" id="t-needle"></div></div>
+          <div class="tuner-cents num" id="t-cents">Start the tuner and play a string</div>
+        </div>
+        <div class="listen-row center"><button class="btn btn-primary" id="t-start">Start tuner</button></div>
+        <p class="hint center">Standard tuning: E2 A2 D3 G3 B3 E4</p>
+        <p class="errors" id="t-error" hidden></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PROGRESS ============ -->
+  <section id="view-progress" class="view" hidden>
+    <h1>Progress</h1>
+    <div class="stats" id="pr-stats"></div>
+    <h2>Accuracy over time</h2>
+    <div class="chart" id="pr-chart"></div>
+    <h2>By style</h2>
+    <div class="style-bars" id="pr-styles"></div>
+    <h2>Pieces you have worked on</h2>
+    <div class="table-scroll"><table class="table" id="pr-table"></table></div>
+    <div class="listen-row">
+      <button class="btn" id="pr-reset">Clear practice history</button>
+      <span id="pr-confirm" hidden>Delete all history? <button class="btn btn-danger" id="pr-yes">Yes, delete</button> <button class="btn" id="pr-no">Keep it</button></span>
+    </div>
+  </section>
+</main>
+
+<script src="vendor/vexflow.js"></script>
+<script src="js/theory.js"></script>
+<script src="js/dsl.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/pitch.js"></script>
+<script src="js/score.js"></script>
+<script src="js/player.js"></script>
+<script src="js/fretboard.js"></script>
+<script src="js/store.js"></script>
+<script src="js/chords.js"></script>
+<script src="js/library/meta.js"></script>
+<script src="js/library/bluegrass.js"></script>
+<script src="js/library/jazz.js"></script>
+<script src="js/library/gypsy.js"></script>
+<script src="js/library/blues.js"></script>
+<script src="js/library/metal.js"></script>
+<script src="js/library/greek.js"></script>
+<script src="js/library/lebanese.js"></script>
+<script src="js/library/classical.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
