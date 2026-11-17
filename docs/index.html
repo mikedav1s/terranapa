@@ -70,8 +70,9 @@
               <label><input type="checkbox" id="opt-count"> Count-in</label>
               <label><input type="checkbox" id="opt-click"> Click</label>
               <label><input type="checkbox" id="opt-guide"> Guide notes</label>
-              <label><input type="checkbox" id="opt-backing"> Chords</label>
-              <label><input type="checkbox" id="opt-swing"> Swing</label>
+              <label title="Bass, comping and drums in the style of the piece"><input type="checkbox" id="opt-backing"> Band</label>
+              <label title="Small variations in timing and touch, like a player"><input type="checkbox" id="opt-human"> Humanize</label>
+              <label class="feel">Feel <select id="opt-feel" class="input small"></select> <span class="feel-tag num" id="feel-tag"></span></label>
             </div>
             <div class="toggles">
               <label>Bars <input type="number" id="bar-from" class="input small" min="1"> to <input type="number" id="bar-to" class="input small" min="1"></label>
@@ -161,7 +162,10 @@ g3 c#4 bb3       a pitch by name; open strings are e2 a2 d3 g3 b3 e4
 r                rest            -   hold the previous note (tie)
 |                bar line        [Am7]  chord symbol
 after a note:    h hammer-on  p pull-off  s slide  ~ vibrato
-                 b whole-step bend  b1 half-step bend  q quarter-tone bend</pre>
+                 b whole-step bend  b1 half-step bend  q quarter-tone bend
+                 &gt; accent  . staccato  _ ghost note  m palm mute
+{5/1}  {5/1s}    grace note into the next note (hammered, or slid with s)
+!p !mf !f        dynamics from here on (pp p mp mf f ff)</pre>
           </details>
         </div>
       </div>
@@ -221,6 +225,16 @@ after a note:    h hammer-on  p pull-off  s slide  ~ vibrato
               <option value="9/8z">9/8 (karsilamas 2+2+2+3)</option><option value="10/8">10/8 (sama'i 3+2+2+3)</option><option>12/8</option>
             </select>
           </label>
+          <label class="field"><span>Sound</span>
+            <select id="m-groove" class="input">
+              <option value="click">Click</option><option value="swing">Jazz ride (swing)</option><option value="shuffle">Blues shuffle</option>
+              <option value="rock">Rock / jam</option><option value="metal">Metal</option><option value="greek">Greek (hasapiko, kalamatianos)</option>
+              <option value="arabic">Darbuka: maqsum / sama'i</option><option value="baladi">Darbuka: baladi</option>
+            </select>
+          </label>
+          <label class="field"><span>Swing</span>
+            <select id="m-swing" class="input"><option value="0.5">Straight</option><option value="0.58">Light</option><option value="auto">Swing (by tempo)</option><option value="0.667">Shuffle</option></select>
+          </label>
           <label class="field"><span>Subdivide the beat</span>
             <select id="m-sub" class="input"><option value="1">None</option><option value="2">Eighths</option><option value="3">Triplets</option><option value="4">Sixteenths</option></select>
           </label>
@@ -263,6 +277,8 @@ after a note:    h hammer-on  p pull-off  s slide  ~ vibrato
 <script src="js/theory.js"></script>
 <script src="js/dsl.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/feel.js"></script>
+<script src="js/band.js"></script>
 <script src="js/pitch.js"></script>
 <script src="js/score.js"></script>
 <script src="js/player.js"></script>

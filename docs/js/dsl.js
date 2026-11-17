@@ -11,8 +11,11 @@
      5/3+4/2+3/0        several notes at once (a chord or double stop)
      r                  rest               -    tie: hold the previous note on
      |                  bar line           [Am7] chord symbol over the next note
-     suffixes on a note: h hammer-on, p pull-off, s slide, ~ vibrato,
-                         b bend a whole step (b1 = half step), q bend a quarter tone
+     {5/1}  {5/1s}      grace note before the next note (hammered, or slid with s)
+     !pp !p !mp !mf !f !ff   dynamic level from here on
+     suffixes on a note: h hammer-on, p pull-off, s slide (all: from the previous note)
+                         ~ vibrato   b bend a whole step (b1 = half step)   q quarter-tone bend
+                         > accent    . staccato   _ ghost note   m palm mute
 */
 (function () {
   const GP = (window.GP = window.GP || {});
@@ -25,24 +28,46 @@
   const RE_FRET = /^([1-6])\/(\d{1,2})$/;
   const RE_PITCH = /^([a-g])(#|b)?(\d)$/;
 
-  function splitSuffix(tok, isPitch) {
-    // Pitch tokens end in a digit before any suffix, fret tokens too — so strip letters after the last digit.
-    const m = /^(.*\d)([a-z~0-9]*)$/.exec(tok);
-    if (!m) return { core: tok, techs: [] };
-    let core = m[1];
-    let suf = m[2];
-    // "b1"/"b2" suffixes contain digits; re-scan from the left of the suffix region.
-    const full = tok;
-    const sm = /^(.*?\d)((?:h|p|s|~|b1|b2|b|q)+)$/.exec(full);
+  // Suffixes after a note: articulation and technique marks.
+  const RE_SUFFIX = /^(.*?\d)((?:h|p|s|~|b1|b2|b|q|>|\.|_|m)*)$/;
+  const RE_TECH = /b1|b2|h|p|s|~|b|q|>|\.|_|m/g;
+  const DYN = { pp: 0.3, p: 0.42, mp: 0.54, mf: 0.64, f: 0.78, ff: 0.9 };
+
+  function splitSuffix(tok) {
+    const sm = RE_SUFFIX.exec(tok);
     if (sm && (RE_FRET.test(sm[1]) || RE_PITCH.test(sm[1]))) {
-      core = sm[1];
-      suf = sm[2];
-    } else {
-      core = full;
-      suf = '';
+      return { core: sm[1], techs: sm[2] ? sm[2].match(RE_TECH) : [] };
     }
-    const techs = suf ? suf.match(/b1|b2|h|p|s|~|b|q/g) : [];
-    return { core, techs };
+    return { core: tok, techs: [] };
+  }
+
+  /* One note from "6/3" or "c#4" (core only, no suffix). */
+  function noteFrom(core, pos, flats, errors, raw) {
+    let m;
+    let note = null;
+    if ((m = RE_FRET.exec(core))) {
+      const string = Number(m[1]);
+      const fret = Number(m[2]);
+      const midi = T.fretMidi(string, fret);
+      const nm = T.pcName(midi, flats);
+      note = { string, fret, midi, letter: nm[0].toLowerCase(), acc: nm.slice(1) };
+    } else if ((m = RE_PITCH.exec(core))) {
+      const pc = T.LETTER_PC[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+      const midi = (Number(m[3]) + 1) * 12 + pc;
+      const p = placePitch(midi, pos);
+      if (!p) errors.push('Pitch out of range: ' + core);
+      else note = { string: p.string, fret: p.fret, midi, letter: m[1], acc: m[2] || '' };
+    } else {
+      errors.push('Unknown token: ' + raw);
+    }
+    if (note) {
+      // written octave for guitar notation is one above sounding
+      const letterPc = T.LETTER_PC[note.letter];
+      const natural = note.midi - (note.acc === '#' ? 1 : note.acc === 'b' ? -1 : 0);
+      note.oct = Math.floor(natural / 12);
+      if (((natural % 12) + 12) % 12 !== letterPc) errors.push('Spelling error at ' + raw);
+    }
+    return note;
   }
 
   function placePitch(midi, pos) {
@@ -85,6 +110,9 @@
     let dur = { ticks: 480, base: 'q', dots: 0, tuplet: false };
     let pos = lick.pos || 0;
     let pendingChord = null;
+    let pendingGrace = null;
+    let dyn = null;
+    let dynMark = null;
 
     const tokens = (lick.notes || '').trim().split(/\s+/).filter(Boolean);
     for (const raw of tokens) {
@@ -112,10 +140,23 @@
         pendingChord = raw.slice(1, -1);
         continue;
       }
+      if (raw[0] === '!' && DYN[raw.slice(1)] != null) {
+        dyn = DYN[raw.slice(1)];
+        dynMark = raw.slice(1);
+        continue;
+      }
+      if (raw[0] === '{' && raw[raw.length - 1] === '}') {
+        const { core, techs } = splitSuffix(raw.slice(1, -1));
+        const g = noteFrom(core, pos, flats, errors, raw);
+        if (g) pendingGrace = { note: g, slide: techs.includes('s') };
+        continue;
+      }
       const ev = {
         i: events.length, bar: bars.length, ticks: dur.ticks, base: dur.base, dots: dur.dots, tuplet: dur.tuplet,
         vf: VF_DUR[dur.base], rest: false, tie: false, notes: [], techs: [], bend: 0, chord: null,
+        dyn, dynMark, grace: null, accent: false, stacc: false, ghost: false, mute: false, legato: null,
       };
+      dynMark = null;
       if (pendingChord) {
         ev.chord = pendingChord;
         pendingChord = null;
@@ -133,36 +174,23 @@
       } else {
         for (const part of raw.split('+')) {
           const { core, techs } = splitSuffix(part);
-          let note = null;
-          if ((m = RE_FRET.exec(core))) {
-            const string = Number(m[1]);
-            const fret = Number(m[2]);
-            const midi = T.fretMidi(string, fret);
-            const nm = T.pcName(midi, flats);
-            note = { string, fret, midi, letter: nm[0].toLowerCase(), acc: nm.slice(1) };
-          } else if ((m = RE_PITCH.exec(core))) {
-            const pc = T.LETTER_PC[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
-            const midi = (Number(m[3]) + 1) * 12 + pc;
-            const p = placePitch(midi, pos);
-            if (!p) errors.push('Pitch out of range: ' + core);
-            else note = { string: p.string, fret: p.fret, midi, letter: m[1], acc: m[2] || '' };
-          } else {
-            errors.push('Unknown token: ' + raw);
-          }
-          if (note) {
-            // written octave for guitar notation is one above sounding
-            const letterPc = T.LETTER_PC[note.letter];
-            const natural = note.midi - (note.acc === '#' ? 1 : note.acc === 'b' ? -1 : 0);
-            note.oct = Math.floor(natural / 12) - 1 + 1;
-            if (((natural % 12) + 12) % 12 !== letterPc) errors.push('Spelling error at ' + raw);
-            ev.notes.push(note);
-          }
+          const note = noteFrom(core, pos, flats, errors, raw);
+          if (note) ev.notes.push(note);
           for (const t of techs) {
             if (t === 'b' || t === 'b2') ev.bend = 2;
             else if (t === 'b1') ev.bend = 1;
             else if (t === 'q') ev.bend = 0.5;
-            ev.techs.push(t);
+            else if (t === '>') ev.accent = true;
+            else if (t === '.') ev.stacc = true;
+            else if (t === '_') ev.ghost = true;
+            else if (t === 'm') ev.mute = true;
+            else if (t === 'h' || t === 'p' || t === 's') ev.legato = t;
+            if (!ev.techs.includes(t)) ev.techs.push(t);
           }
+        }
+        if (pendingGrace && ev.notes.length) {
+          ev.grace = pendingGrace;
+          pendingGrace = null;
         }
         if (!ev.notes.length) continue;
         const used = new Set();

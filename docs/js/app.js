@@ -39,11 +39,11 @@
 
   /* ================= library / practice ================= */
   const prefs = Object.assign(
-    { style: 'all', tag: '', loop: true, countIn: true, click: true, guide: true, backing: true, notation: true, tab: true, alongGuide: false, latency: 60 },
+    { style: 'all', tag: '', loop: true, countIn: true, click: false, guide: true, backing: true, humanize: true, feel: 'auto', notation: true, tab: true, alongGuide: false, latency: 60 },
     S.get('prefs', {})
   );
   const savePrefs = () => S.set('prefs', prefs);
-  const st = { lick: null, parsed: null, score: null, fb: null, bpm: 100, mode: null, ear: false, swing: false };
+  const st = { lick: null, parsed: null, score: null, fb: null, bpm: 100, mode: null, ear: false };
   const transport = new GP.Transport();
 
   function buildFilters() {
@@ -112,7 +112,6 @@
     st.lick = lick;
     st.parsed = dsl.parseLick(lick);
     st.bpm = S.get('bpm.' + lick.id, lick.tempo || 100);
-    st.swing = !!lick.swing;
     S.set('last', lick.id);
     $('editor').hidden = true;
     $('lick-view').hidden = false;
@@ -144,9 +143,7 @@
     $('bar-from').value = 1;
     $('bar-to').value = st.parsed.bars.length;
     $('bar-from').max = $('bar-to').max = st.parsed.bars.length;
-    $('opt-swing').checked = st.swing;
-    $('opt-swing').parentElement.hidden = m.den !== 4;
-    $('opt-backing').parentElement.hidden = !st.parsed.events.some((e) => e.chord);
+    $('opt-feel').parentElement.hidden = m.den !== 4 && m.den !== 2;
     updateBpm();
     renderScoreOnly();
     renderHistory();
@@ -166,7 +163,8 @@
     $('lick-fb').parentElement.hidden = st.ear;
     if (!st.ear) {
       try {
-        st.score = GP.score.render($('score'), st.parsed, { notation: prefs.notation || !prefs.tab, tab: prefs.tab });
+        const r = swingRatio();
+        st.score = GP.score.render($('score'), st.parsed, { notation: prefs.notation || !prefs.tab, tab: prefs.tab, feel: r >= 0.56 ? (r >= 0.655 ? 'Shuffle' : 'Swing') : null });
       } catch (e) {
         st.score = null;
         $('lick-errors').hidden = false;
@@ -202,7 +200,13 @@
   function updateBpm() {
     const target = st.lick.tempo || 100;
     $('bpm-out').textContent = st.bpm + ' bpm (' + pct(st.bpm / target) + ')';
+    const r = swingRatio();
+    $('feel-tag').textContent = GP.feel.label(r);
     document.querySelectorAll('#pct-btns button').forEach((b) => b.classList.toggle('on', Math.round(target * Number(b.dataset.pct)) === st.bpm));
+  }
+
+  function swingRatio() {
+    return GP.feel.ratio(st.lick, st.bpm, prefs.feel);
   }
 
   function transportOpts(extra) {
@@ -210,7 +214,8 @@
     const to = Math.max(from + 1, Number($('bar-to').value) || st.parsed.bars.length) - 1;
     return Object.assign({
       bpm: st.bpm, loop: prefs.loop, countIn: prefs.countIn, click: prefs.click, guide: prefs.guide,
-      backing: prefs.backing, swing: st.swing, fromBar: from, toBar: to,
+      band: prefs.backing, swing: swingRatio(), style: st.lick.style, lick: st.lick, humanize: prefs.humanize,
+      fromBar: from, toBar: to,
       rampBpm: Number($('ramp').value) || 0, rampMax: 300,
       onEvent: setCursor,
       onPass: (n, bpm) => {
@@ -218,6 +223,7 @@
           st.bpm = bpm;
           $('bpm').value = bpm;
           updateBpm();
+          transport.ratio = swingRatio();
         }
       },
     }, extra);
@@ -670,16 +676,34 @@
       $('m-start').textContent = '■ Stop';
       $('m-start').classList.add('stop');
     },
+    swing() {
+      const v = $('m-swing').value;
+      return v === 'auto' ? Math.max(0.55, Math.min(0.69, 0.7 - (this.bpm - 80) * 0.0011)) : Number(v);
+    },
     pump() {
       const sp = this.spec();
       const sub = Number($('m-sub').value);
+      const groove = $('m-groove').value;
+      const sw = sp.den === 4 ? this.swing() : 0.5;
       // tempo counts quarter notes; in x/8 meters a group of g eighths lasts g/2 quarters
       while (this.next < A.now() + 0.15) {
         const g = sp.groups[this.beat % sp.groups.length];
         const len = (60 / this.bpm) * (sp.den === 8 ? g / 2 : 4 / sp.den);
-        A.click(this.next, this.beat === 0 ? 2 : 1);
-        const parts = sp.den === 8 ? g : sub;
-        if (sp.den === 8 ? sub > 1 : sub > 1) for (let k = 1; k < parts; k++) A.click(this.next + (len * k) / parts, 0);
+        if (groove === 'click') {
+          A.click(this.next, this.beat === 0 ? 2 : 1);
+          const parts = sp.den === 8 ? g : sub;
+          if (sub > 1) {
+            for (let k = 1; k < parts; k++) {
+              const x = parts === 2 ? sw : k / parts;
+              A.click(this.next + len * x, 0);
+            }
+          }
+        } else if (this.beat === 0) {
+          const secs = (tk) => (tk / 480) * (60 / this.bpm);
+          for (const d of GP.band.drumBar(groove, sp, this.bar)) {
+            A.drum[d.name](this.next + secs(GP.feel.warp(d.tick, sw)), d.vel * (1 + GP.feel.rnd() * 0.05));
+          }
+        }
         this.queue.push({ t: this.next, beat: this.beat });
         this.next += len;
         this.beat++;
@@ -897,10 +921,19 @@
     bind('opt-click', 'click');
     bind('opt-guide', 'guide');
     bind('opt-backing', 'backing');
+    bind('opt-human', 'humanize');
+    GP.feel.FEELS.forEach((f) => $('opt-feel').append(h('option', { value: f.id }, f.label)));
+    $('opt-feel').value = prefs.feel;
+    $('opt-feel').onchange = () => {
+      prefs.feel = $('opt-feel').value;
+      savePrefs();
+      updateBpm();
+      renderScoreOnly();
+      if (st.mode === 'play') transport.ratio = swingRatio();
+    };
     bind('opt-notation', 'notation', true);
     bind('opt-tab', 'tab', true);
     bind('opt-along-guide', 'alongGuide');
-    $('opt-swing').onchange = () => (st.swing = $('opt-swing').checked);
     $('opt-ear').onchange = () => { st.ear = $('opt-ear').checked; renderScoreOnly(); };
     $('ramp').value = 0;
     $('latency').value = prefs.latency;

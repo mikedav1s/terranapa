@@ -36,6 +36,7 @@
         w += ev.ticks >= 480 ? 34 : ev.ticks >= 240 ? 29 : 25;
         if (ev.notes.some((n) => n.acc)) w += 7;
         if (ev.chord) w += 6;
+        if (ev.grace) w += 16;
       }
       return Math.max(70, w);
     });
@@ -51,7 +52,7 @@
       row.used += w;
     });
     const rowH = (showNotation && showTab ? ROW_HEIGHT : showNotation ? 150 : 150);
-    const H = rows.length * rowH + 8;
+    const H = rows.length * rowH + 24;
     const totalW = Math.max(W, ...rows.map((r) => r.used));
 
     const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
@@ -108,6 +109,18 @@
         const sTuplets = [];
         let tupS = [];
         let tupT = [];
+        let tupTicks = 0;
+        let tupBases = [];
+        const closeTuplet = () => {
+          const six = tupBases.length === 6 && tupBases.every((b) => b === 's');
+          const spec = six ? { num_notes: 6, notes_occupied: 4, ratioed: false } : { num_notes: 3, notes_occupied: 2, ratioed: false };
+          if (tupS.length) sTuplets.push(new VF.Tuplet(tupS, spec));
+          if (tupT.length) new VF.Tuplet(tupT, spec);
+          tupS = [];
+          tupT = [];
+          tupTicks = 0;
+          tupBases = [];
+        };
         bar.events.forEach((i) => {
           const ev = parsed.events[i];
           const dur = vfDuration(ev);
@@ -123,6 +136,18 @@
               });
             }
             if (ev.dots) VF.Dot.buildAndAttach([sn], { all: true });
+            if (!ev.rest && !ev.tie) {
+              const above = VF.Modifier.Position.ABOVE;
+              if (ev.accent) sn.addModifier(new VF.Articulation('a>').setPosition(above), 0);
+              if (ev.stacc) sn.addModifier(new VF.Articulation('a.').setPosition(above), 0);
+              if (ev.ghost && VF.Parenthesis) VF.Parenthesis.buildAndAttach([sn]);
+              if (ev.grace) {
+                const g = ev.grace.note;
+                const gn = new VF.GraceNote({ keys: [g.letter + g.acc + '/' + g.oct], duration: '8', slash: true });
+                if (g.acc) gn.addModifier(new VF.Accidental(g.acc), 0);
+                sn.addModifier(new VF.GraceNoteGroup([gn], false), 0);
+              }
+            }
             if (ev.tie && prevStaveNote) {
               const idx = ev.notes.map((_, j) => j);
               ties.push({ first: prevStaveNote.note, firstRow: prevStaveNote.row, last: sn, idx });
@@ -138,12 +163,24 @@
                 positions: ev.notes.map((n) => ({ str: n.string, fret: n.fret })),
                 duration: dur,
               });
+              if (ev.ghost) tn.setGhost(true);
+              if (ev.grace) {
+                const g = ev.grace.note;
+                const gt = new VF.GraceTabNote({ positions: [{ str: g.string, fret: g.fret }], duration: '8' });
+                tn.addModifier(new VF.GraceNoteGroup([gt], false), 0);
+              }
+              if (ev.mute) {
+                const an = new VF.Annotation('P.M.');
+                an.setFont('Arial', 8, 'normal');
+                an.setVerticalJustification(VF.Annotation.VerticalJustify.BOTTOM);
+                tn.addModifier(an, 0);
+              }
               for (const t of ev.techs) {
                 if (t === 'b' || t === 'b2') tn.addModifier(new VF.Bend('Full'), 0);
                 else if (t === 'b1') tn.addModifier(new VF.Bend('1/2'), 0);
                 else if (t === 'q') tn.addModifier(new VF.Bend('1/4'), 0);
                 else if (t === '~') tn.addModifier(new VF.Vibrato(), 0);
-                else {
+                else if (t === 'h' || t === 'p' || t === 's') {
                   const label = t === 'h' ? 'H' : t === 'p' ? 'P' : 'sl';
                   const an = new VF.Annotation(label);
                   an.setFont('Arial', 9, 'normal', 'italic');
@@ -157,17 +194,16 @@
           if (ev.tuplet) {
             if (sn) tupS.push(sn);
             if (tn) tupT.push(tn);
-            const full = Math.max(tupS.length, tupT.length) === 3;
-            if (full) {
-              if (tupS.length) sTuplets.push(new VF.Tuplet(tupS, { num_notes: 3, notes_occupied: 2 }));
-              if (tupT.length) new VF.Tuplet(tupT, { num_notes: 3, notes_occupied: 2 });
-              tupS = [];
-              tupT = [];
-            }
+            tupTicks += ev.ticks;
+            tupBases.push(ev.base);
+            if (tupTicks % 480 === 0) closeTuplet();
+          } else if (tupS.length || tupT.length) {
+            closeTuplet();
           }
           pos[i] = { sn, tn, row: ri };
         });
 
+        if (tupS.length || tupT.length) closeTuplet();
         const voices = [];
         let sVoice = null;
         let tVoice = null;
@@ -218,6 +254,12 @@
             txt.textContent = ev.chord;
             svg.appendChild(txt);
           }
+          if (ev.dynMark) {
+            const dx = ev.chord ? nx + ev.chord.length * 8 + 4 : nx - 4;
+            const txt = svgEl('text', { x: dx, y: y - 6, class: 'gp-dyn' });
+            txt.textContent = ev.dynMark;
+            svg.appendChild(txt);
+          }
         });
         if (ri !== prevRow || k === 0) {
           const num = svgEl('text', { x: x + 2, y: y + 32, class: 'gp-barnum' });
@@ -228,6 +270,12 @@
         x += w;
       });
     });
+
+    if (opts.feel) {
+      const txt = svgEl('text', { x: 4, y: 14, class: 'gp-feel' });
+      txt.textContent = opts.feel + (opts.feel === 'Shuffle' ? ' (eighths as triplets)' : ' eighths');
+      svg.appendChild(txt);
+    }
 
     // ---- overlay: cursor + result marks ----
     const overlay = svgEl('g', { class: 'gp-overlay' });

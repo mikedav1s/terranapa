@@ -265,3 +265,8 @@ textarea.input { resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }
 }
+
+.feel select.input.small { width: auto; padding: 3px 6px; }
+.feel-tag { font: 500 0.75rem var(--font-mono); color: var(--ink-2); }
+.gp-feel { font: italic 600 13px var(--font-body); fill: #17201c; }
+.gp-dyn { font: italic 700 13px Georgia, 'Times New Roman', serif; fill: #17201c; }
